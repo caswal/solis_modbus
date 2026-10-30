@@ -811,6 +811,9 @@ hybrid_sensors = [
                 "category": Category.LOAD_INFORMATION,
                 "unique": "solis_modbus_inverter_backup_load_power",
                 "register": ["33148"],
+                # Two's complement: an idle backup port reports a small negative
+                # metering offset, which decodes as ~65450W if read unsigned.
+                "data_type": DataType.S16,
                 "device_class": SensorDeviceClass.POWER,
                 "multiplier": 0,
                 "unit_of_measurement": UnitOfPower.WATT,

@@ -702,12 +702,16 @@ class DataRetrieval:
             self._spike_counter[register] = 0
             return value
 
-        # 33148 Backup load power (U16): parallel inverter setups can briefly
+        # 33148 Backup load power (S16): parallel inverter setups can briefly
         # report wrap-around/sentinel-like values (for example 65526).
         if register == 33148:
             wattage = getattr(self.controller.inverter_config, "wattage_chosen", 0) or 0
             plausible_max = int(max(10000, wattage * 2))
-            is_implausible = value >= 65000 or value > plausible_max
+            # The register is two's complement, so a backup port sitting idle reports
+            # a small negative offset (65456 == -80W). Judge the signed magnitude, or
+            # every such reading looks like a wrap-around outlier.
+            signed_value = value - 65536 if value > 32767 else value
+            is_implausible = abs(signed_value) > plausible_max
 
             if not is_implausible:
                 self._spike_counter[register] = 0
@@ -716,12 +720,12 @@ class DataRetrieval:
             self._spike_counter[register] += 1
             if self._spike_counter[register] < 3:
                 _LOGGER.debug(
-                    f"Ignoring transient backup load outlier {value}W (max={plausible_max}W); "
+                    f"Ignoring transient backup load outlier {signed_value}W (max={plausible_max}W); "
                     f"retaining previous value {cached_value} (counter={self._spike_counter[register]})"
                 )
                 return cached_value if cached_value is not None else value
 
-            _LOGGER.debug(f"Accepting persistent backup load outlier {value}W after {self._spike_counter[register]} cycles (max={plausible_max}W)")
+            _LOGGER.debug(f"Accepting persistent backup load outlier {signed_value}W after {self._spike_counter[register]} cycles (max={plausible_max}W)")
             self._spike_counter[register] = 0
             return value
 
